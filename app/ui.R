@@ -44,7 +44,7 @@ ui <- fluidPage(
             choiceValues = list(1, 2, 3)
           ),
           br(),
-          actionButton("get_u_details", 'Validate', icon =icon("pencil")),
+          actionButton("get_u_details", 'Validate', icon =icon("pencil-alt")),
           hspace(2),
           uiOutput("valid_details", inline = TRUE)
         ),
@@ -52,27 +52,30 @@ ui <- fluidPage(
         # LAYER CREATION
         tabPanel(
           "Geometries",
-          icon = icon("pencil"),
+          icon = icon("pencil-alt"),
           myhelptxt("This tab allows you to create or import areas of interest using one of the three tabs below."),
 
           # Three selections panels
           tabsetPanel(
-
+            
             tabPanel(
               "Bounding box",
               myhelptxt("Use the fields below to create a bounding box."),
               div(style="display: inline-block; vertical-align:top;",
-                numericInput("bbox_xmin", label = "Xmin", value = "0", min = -180, max = 180)),
+                numericInput("bbox_xmin", label = "Longitude min", value = "-67.183", min = -180, max = 180)),
               div(style="display: inline-block; vertical-align:top;",
-                numericInput("bbox_xmax", label = "Xmax", value = "0", min = -180, max = 180)),
+                numericInput("bbox_xmax", label = "Longitude max", value = "-66.183", min = -180, max = 180)),
               br(),
               div(style="display: inline-block; vertical-align:top;",
-                numericInput("bbox_ymin", label = "Ymin", value = "0", min = -90, max = 90)),
+                numericInput("bbox_ymin", label = "Latitude min", value = "44.650", min = -90, max = 90)),
               div(style="display: inline-block; vertical-align:top;",
-                numericInput("bbox_ymax", label = "Ymax", value = "0", min = -90, max = 90)),
+                numericInput("bbox_ymax", label = "Latitude max", value = "45.650", min = -90, max = 90)),
               br(),
-              numericInput("bbox_crs", label = HTML("Spatial projection (see EPSG code: <a href='https://epsg.io/' target='_blank'>https://epsg.io/</a>)"), value = "4326"),
-              numericInput("bbox_buffer", label = "Optional buffer (m)", value = "0", min = 0),
+              numericInput("bbox_buffer", label = "Optional buffer (m)", value = "10000", min = 0, max = 25000000),
+              tags$details(
+                  tags$summary("Advanced options", icon("cog")),
+                  numericInput("bbox_crs", label = HTML("Spatial projection (see EPSG code: <a href='https://epsg.io/' target='_blank'>https://epsg.io/</a>)"), value = "4326")
+                ),
               br(),
               myhelptxt("Save bounding box. Note that geometries will not be automatically added to the map. Go to the <code>Check</code> tab to add geometries."),
               actionButton('save_bbox', 'Save', icon = icon("download"))
@@ -82,12 +85,15 @@ ui <- fluidPage(
               "Individual point",
               myhelptxt("Use the fields below to create a bounding box centered on an individual point with a buffer."),
               div(style="display: inline-block;vertical-align:top;",
-                numericInput("pt_x", label = "X", value = "0", min = -180, max = 180)),
+                numericInput("pt_x", label = "Longitude", value = "0", min = -180, max = 180)),
               div(style="display: inline-block;vertical-align:top;",
-                numericInput("pt_y", label = "Y", value = "0", min = -180, max = 180)),
+                numericInput("pt_y", label = "Latitude", value = "0", min = -180, max = 180)),
               br(),
-              numericInput("pt_crs", label = HTML("Spatial projection (see EPSG code: <a href='https://epsg.io/' target='_blank'>https://epsg.io/</a>)"), value = "4326"),
-              numericInput("pt_buffer", label = "Optional buffer (m)", value = "0", min = 0),
+              numericInput("pt_buffer", label = "Optional buffer (m)", value = "100000", min = 0, max = 25000000),
+              tags$details(
+                  tags$summary("Advanced options", icon("cog")),
+                  numericInput("pt_crs", label = HTML("Spatial projection (see EPSG code: <a href='https://epsg.io/' target='_blank'>https://epsg.io/</a>)"), value = "4326")
+                ),
               br(),
               myhelptxt("Save bounding box. Note that geometries will not be automatically added to the map. Go to the <code>Check</code> tab to add geometries."),
               actionButton('save_pt', 'Save', icon = icon("download"))
@@ -128,7 +134,7 @@ ui <- fluidPage(
           myhelptxt("This tab allows you to validate geometries you wish to use to generate the report and, if desired, add a buffer to selected geometries."),
           checkboxGroupInput("check_input_areas", choiceNames = "Input placeholder1", choiceValues = 1, c("none")),
           #
-          actionButton('add_geoms_to_map', 'Add to map', icon = icon("pencil")),
+          actionButton('add_geoms_to_map', 'Add to map', icon = icon("pencil-alt")),
           actionButton('valid_geoms', "Validate", icon = icon("check")),
           actionButton('clear_map', "Clear map", icon = icon("trash-alt")),
           br(),

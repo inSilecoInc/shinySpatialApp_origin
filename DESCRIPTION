@@ -10,6 +10,7 @@ Imports:
   cli,
   crayon,
   glue,
+  ggspatial,
   leaflet,
   leafem,
   mapedit,
