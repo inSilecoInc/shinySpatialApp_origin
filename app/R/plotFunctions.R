@@ -12,13 +12,22 @@
 # Created by Quentin Stoyel, September 2, 2021 for reproducible reporting project
 
 plot_rr_sf <- function(baseMap, data_sf, ...) {
-  if (inherits(sf::st_geometry(data_sf), "sfc_POINT")) {
+  
+  if (inherits(data_sf, "RasterLayer")) {
+    
+    outPlot <- plot_raster(baseMap, data_sf, ...)
+    
+  }else if (inherits(sf::st_geometry(data_sf), c("sfc_POINT"))) {
     
     outPlot <- plot_points(baseMap, data_sf, ...)
     
   } else if (inherits(sf::st_geometry(data_sf), c("sfc_POLYGON", "sfc_MULTIPOLYGON", "sfc_GEOMETRY"))) {
     
     outPlot <- plot_polygons(baseMap, data_sf, ...)
+    
+  } else if (inherits(sf::st_geometry(data_sf), "sfc_LINESTRING")) {
+    
+    outPlot <- plot_lines(baseMap, data_sf, ...)
     
   }
   
@@ -53,6 +62,68 @@ get_study_box_layer <- function(inPlot) {
   return(studyBoxLayer)
 }
 
+# helper function to reduce tick mark counts on plots
+less_x_ticks <- function(inPlot, tickNum=5) {
+  xmin <- inPlot$coordinates$limits$x[1]
+  xmax <- inPlot$coordinates$limits$x[2]
+  #set outplot axis tick marks
+  axisSigFigs <- ceiling(log10(xmax - xmin))
+  digits <- ifelse(axisSigFigs < 0, -axisSigFigs, 1)
+  breakVec <- round(seq(xmin, xmax, length.out = tickNum),
+                    digits = digits)
+  outPlot <- inPlot + scale_x_continuous(breaks = breakVec) 
+  return(outPlot)
+}
+
+
+# Function for plotting raster data for the reproducible report.
+#
+# Inputs:
+# 1. baseMap = map object, either areaMap or regionMap
+# 2. data_sf: raster data to be plotted 
+#    (ideally, pre-clipped to map area with the master_intersect function, using bboxMap, or regionBox)
+# 3. legendName: string, sets the name of the legend for cases where the attribute is not appropriate. Defaults to
+#                the attribute.  
+# 
+# Created by Quentin Stoyel, December 16, 2021 for reproducible reporting project
+
+plot_raster <- function(baseMap, rasterData, legendName="", bgCutoff=0,
+                        rescaleLim=c(0,100), midpoint=50) {
+  
+  # extract layers to ensure it plots over polygons/study area box
+  scaleBarLayer = get_scale_bar_layer(baseMap)
+  studyBoxLayer = get_study_box_layer(baseMap)
+  watermarkLayer = get_watermark_layer(baseMap)
+  
+  # axis limits based on baseMap
+  axLim = ggplot2::coord_sf(xlim=baseMap$coordinates$limits$x, 
+                            ylim=baseMap$coordinates$limits$y, expand=FALSE) 
+  
+  raster_spdf <- as(rasterData, "SpatialPixelsDataFrame")
+  raster_df <- as.data.frame(raster_spdf)
+  colnames(raster_df) <- c("value", "x", "y")
+  raster_df$value <- round(scales::rescale(raster_df$value, rescaleLim))
+  raster_df$value[raster_df$value < bgCutoff] <- NA
+  
+  dataLayer <- geom_tile(data=raster_df, aes(x=x, y=y, fill=value))
+  
+  
+  legendLayer <-   scale_fill_gradient2(low = 'red', mid="yellow", high = 'green',
+                                       na.value = NA, midpoint=midpoint, name=legendName)  
+
+  rasterMap <- baseMap +
+    legendLayer +
+    dataLayer +
+    axLim +
+    watermarkLayer +
+    studyBoxLayer +
+    scaleBarLayer
+  
+  return(rasterMap) 
+}
+
+
+
 
 # Function for plotting point data for the reproducible report.
 #
@@ -71,7 +142,8 @@ get_study_box_layer <- function(inPlot) {
 # 
 # Created by Quentin Stoyel, September 2, 2021 for reproducible reporting project
 
-plot_points <- function(baseMap, data_sf, attribute=NULL, legendName="", colorMap=NULL, shapeMap=NULL) {
+plot_points <- function(baseMap, data_sf, attribute=NULL, legendName="", 
+                        colorMap=NULL, shapeMap=NULL, size=2.5) {
   
   # extract scaleBar layer to ensure it plots over polygons/study area box
   scaleBarLayer = get_scale_bar_layer(baseMap)
@@ -84,11 +156,12 @@ plot_points <- function(baseMap, data_sf, attribute=NULL, legendName="", colorMa
   shapeLayer <- NULL
   
   if (is.null(attribute)) {
-    # just plot raw data (no colors)
-    dataLayer <- geom_sf(data = data_sf, size = 2, shape = 20) 
+    # just plot raw data (no colors, shapes, etc)
+    dataLayer <- geom_sf(data = data_sf, size = size, shape = 20) 
     legendLayer <- NULL
   } else {
-    dataLayer <- geom_sf(data = data_sf, aes(color=!!sym(attribute)), size = 2.5, shape = 20)  
+    data_sf[[attribute]] = as.factor(data_sf[[attribute]])
+    dataLayer <- geom_sf(data = data_sf, aes(color=!!sym(attribute)), size = size, shape = 20)  
     
     if (is.null(colorMap)){
       colorMap <- get_rr_color_map(data_sf[[attribute]])
@@ -98,7 +171,7 @@ plot_points <- function(baseMap, data_sf, attribute=NULL, legendName="", colorMa
         shapeMap <- shapeMap[names(shapeMap) %in% data_sf[[attribute]]]
         shapeLabels <- names(shapeMap)
         shapeValues <- unname(shapeMap) 
-        dataLayer <- geom_sf(data = data_sf, aes(color=!!sym(attribute), shape=!!sym(attribute)), size = 2.5)
+        dataLayer <- geom_sf(data = data_sf, aes(color=!!sym(attribute), shape=!!sym(attribute)), size = size)
         shapeLayer <- scale_shape_manual(labels = shapeLabels, values = shapeValues, name=legendName)  
       }
     }
@@ -146,7 +219,10 @@ plot_points <- function(baseMap, data_sf, attribute=NULL, legendName="", colorMa
 
 
 plot_polygons <- function(baseMap, polyData, attribute, legendName=attribute,
-                          outlines=TRUE, colorMap=NULL, getColorMap=FALSE) {
+                          outlines=TRUE, colorMap=NULL, getColorMap=FALSE,
+                          labelData=NULL, labelAttribute=NULL, 
+                          fillClr="#56B4E9", alpha=1, plotTitle=NULL, 
+                          tickNum = NULL) {
   
   scaleBarLayer = get_scale_bar_layer(baseMap)
   studyBoxLayer = get_study_box_layer(baseMap)
@@ -162,44 +238,68 @@ plot_polygons <- function(baseMap, polyData, attribute, legendName=attribute,
   # there are two types of plots: 
   # Case 1: all polygons are one color, no legend,
   # case 2: polygons are colored based on the "attribute" column, legend is included
+  polyLabels <- NULL
+  polyOutline <- NULL
+  polyFill <- NULL
+  titleLayer <- NULL
   
   if (toupper(attribute) == "NONE") { # Case 1: plotting all polygons in one color
-    
-    polyPlot <- geom_sf(data=polyData, fill="#56B4E9", col=clr)
-    polyFill <- NULL
-    polyOutline <- NULL
-    
+    if (!outlines) {
+      clr = fillClr
+    } 
+    polyPlot <- geom_sf(data = polyData, fill = fillClr, col = clr, alpha=alpha)
     
   } else { # Case 2: plotting polygons in different colors based on "attribute" column in the data
+    polyData[[attribute]] = as.factor(polyData[[attribute]])
     
+    polyAes <- aes(fill = !!sym(attribute))
+
     if (is.null(colorMap)){
       colorMap <- get_rr_color_map(polyData[[attribute]])
     } else {
       colorMap <- colorMap[names(colorMap) %in% polyData[[attribute]]]
     }
-
     polyFill <- scale_fill_manual(values=colorMap, name=legendName)
     
     if (outlines) {
-      polyOutline <- NULL
-      polyPlot <- geom_sf(data=polyData, aes(fill=!!sym(attribute)), colour=clr)
-      
+      polyPlot <- geom_sf(data=polyData, polyAes, colour=clr, alpha=alpha)
     }
     else {
-      polyPlot <- geom_sf(data=polyData, aes(fill=!!sym(attribute), col=!!sym(attribute)))
+      polyAes <- modifyList(polyAes, aes(col=!!sym(attribute)))
+      polyPlot <- geom_sf(data=polyData, polyAes, alpha = alpha)
       polyOutline <- scale_color_manual(values=colorMap, guide="none")  
     }
   }
+  
+  if(!is.null(labelData)) {
+    polyLabels <- ggrepel::geom_label_repel(data = labelData,
+                                            aes(label = !!sym(labelAttribute), geometry = geometry),
+                                            stat = "sf_coordinates",
+                                            min.segment.length = 0
+                                            )
+  }
+  
+  if (!is.null(plotTitle)) {
+    titleLayer <- ggtitle(plotTitle)
+  }
+  
     
   polyMap <- baseMap +
       polyPlot +
       polyFill +
       polyOutline +
+      polyLabels +
       axLim +
       watermarkLayer +
       studyBoxLayer +
-      scaleBarLayer
-    
+      scaleBarLayer +
+      titleLayer
+  
+  
+  if (!is.null(tickNum)){
+    polyMap <- less_x_ticks(polyMap, tickNum)
+  }  
+  
   if (getColorMap) {
     outList <- list(colorMap=colorMap,
                     polyMap=polyMap)
@@ -208,6 +308,41 @@ plot_polygons <- function(baseMap, polyData, attribute, legendName=attribute,
     return(polyMap)  
   }
 }
+
+
+# Function for plotting linestring data for the reproducible report.
+#
+# Inputs:
+# 1. baseMap = map object, either areaMap or regionMap
+# 2. data_sf: sf data to be plotted 
+#    (ideally, pre-clipped to map area with the master_intersect function, using bboxMap, or regionBox)
+# 
+# Created by Quentin Stoyel, October 28, 2021 for reproducible reporting project
+
+plot_lines <- function(baseMap, data_sf, ...) {
+  
+  # extract scaleBar layer to ensure it plots over polygons/study area box
+  scaleBarLayer = get_scale_bar_layer(baseMap)
+  studyBoxLayer = get_study_box_layer(baseMap)
+  watermarkLayer = get_watermark_layer(baseMap)
+  
+  # axis limits based on baseMap
+  axLim = ggplot2::coord_sf(xlim=baseMap$coordinates$limits$x, 
+                            ylim=baseMap$coordinates$limits$y, expand=FALSE) 
+  
+  # just plot raw data (no colors, shapes, etc)
+  dataLayer <- geom_sf(data = data_sf, ...) 
+  
+  lineMap <- baseMap +
+    dataLayer +
+    axLim +
+    watermarkLayer +
+    studyBoxLayer +
+    scaleBarLayer
+  
+  return(lineMap) 
+}
+
 
 # helper function to generate colormap when not specified.  
 # RR color scheme is used for first 8 colors, after which the viridis 
@@ -245,8 +380,8 @@ get_rr_color_map <- function(dataCol) {
 #
 # Outputs: ggplot object with the 4 plots.
 
-plot_cetaceans_4grid<-function(fin_whale_sf, harbour_porpoise_sf,
-                               humpback_whale_sf, sei_whale_sf, studyArea,
+plot_cetaceans_4grid<-function(finWhale_sf, harbourPorpoise_sf,
+                               humpbackWhale_sf, seiWhale_sf, studyArea,
                                landLayer, bufKm, bounds_sf) {
   # buf is in km, and now converted to degrees
   buf <- bufKm / 100
@@ -264,28 +399,33 @@ plot_cetaceans_4grid<-function(fin_whale_sf, harbour_porpoise_sf,
   
   land <- sf::st_crop(landLayer, bboxBuf)
   bound <- sf::st_crop(bounds_sf, bboxBuf)
+  finWhale_sf <- sf::st_crop(finWhale_sf, bboxBuf)
+  harbourPorpoise_sf <- sf::st_crop(harbourPorpoise_sf, bboxBuf)
+  humpbackWhale_sf <- sf::st_crop(humpbackWhale_sf, bboxBuf)
+  seiWhale_sf <- sf::st_crop(seiWhale_sf, bboxBuf)
+  
   
   #Fin Whale
-  finWhalePlot <- whale_ggplot(fin_whale_sf, bound, land, studyArea,
+  finWhalePlot <- whale_ggplot(finWhale_sf, bound, land, studyArea,
                                "Fin Whale", bboxBuf)
   
   #Harbour Porpoise
-  harbourPorpoisePlot <- whale_ggplot(harbour_porpoise_sf, bound, land, studyArea,
+  harbourPorpoisePlot <- whale_ggplot(harbourPorpoise_sf, bound, land, studyArea,
                                       "Harbour Porpoise", bboxBuf)
   
   #humpback whale
-  humpbackWhalePlot <- whale_ggplot(humpback_whale_sf, bound, land, studyArea,
+  humpbackWhalePlot <- whale_ggplot(humpbackWhale_sf, bound, land, studyArea,
                                     "Humpback Whale", bboxBuf)
   
   #Sei Whale
-  seiWhalePlot <- whale_ggplot(sei_whale_sf, bound, land, studyArea,
+  seiWhalePlot <- whale_ggplot(seiWhale_sf, bound, land, studyArea,
                                "Sei Whale", bboxBuf)
   
   #Arrange all 4 cetaceans into grid
   gridExtra::grid.arrange(finWhalePlot, harbourPorpoisePlot, humpbackWhalePlot,
                           seiWhalePlot,
-                          bottom = expression(paste("Longitude ",degree,"N",sep="")),
-                          left = expression(paste("Latitude ",degree,"N",sep="")),
+                          bottom = "",
+                          left = "",
                           nrow = 2)
 }
 
@@ -314,12 +454,13 @@ plot_cetaceans_4grid<-function(fin_whale_sf, harbour_porpoise_sf,
 #
 # Written by Quentin Stoyel for reproducible reporting project, September 2, 2021
 
-maps_setup <- function(studyArea, site, region, areaLandLayer, regionLandLayer, CANborder){
+maps_setup <- function(studyArea, region, areaLandLayer, regionLandLayer, CANborder){
+  site <- sf::st_centroid(studyArea)
   # The following defines studyBox geometry "look". studyBox_geom is input into area map or can be added to any map later
   studyBox_geom <- geom_sf(data=studyArea, fill=NA, col="red", size=1)
   
   # The following plots area map using function (output is a list)
-  areaMapList <- area_map(studyArea, site, areaLandLayer, 5, CANborder, studyBox_geom)
+  areaMapList <- area_map(studyArea, areaLandLayer, 5, CANborder, studyBox_geom)
   
   # The following separates items in the output list: first item is a map and second is a bounding box of the map
   areaMap <- areaMapList[[1]] # map
@@ -365,8 +506,8 @@ maps_setup <- function(studyArea, site, region, areaLandLayer, regionLandLayer, 
 # Written by Gordana Lazin for reproducible reporting project, April 12, 2021
 # ggplot map developed by Greg Puncher, winter/spring 2021
 
-area_map <- function(studyArea, site, landLayer, bufKm, CANborder, studyBoxGeom) {
-  
+area_map <- function(studyArea, landLayer, bufKm, CANborder, studyBoxGeom) {
+  site <- sf::st_centroid(studyArea)
   # buf is in km, and now converted to degrees
   bufx <- bufKm / 100
   bufy <- 0.72 * bufKm / 100 # scaled degrees
@@ -459,16 +600,19 @@ format_ggplot <- function(ggplotIn, bbox) {
                                       (0.7 * (bbox$xmax[[1]] - bbox$xmin[[1]])))
   
   ggplotOut <- ggplotIn +
-    annotation_custom(grid::textGrob("DFO Internal Use Only", rot=rotTheta,
-                                     gp=grid::gpar(fontsize=30, alpha=0.5, col="grey70", fontface="bold")),
+    annotation_custom(grid::textGrob("DFO Internal Use Only", rot = rotTheta,
+                                     gp = grid::gpar(fontsize = 30, alpha = 0.5,
+                                                   col = "grey70",
+                                                   fontface = "bold")),
                       xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf) +
     annotation_scale(location = "bl") +
-    theme_bw()+
-    labs(x = expression(paste("Longitude ", degree, "W", sep = "")),
-         y = expression(paste("Latitude ", degree, "N", sep = "")),
+    theme_bw() +
+    labs(x = "",
+         y = "",
          col = "")  +
-    theme(axis.title.y = element_text(size = 13))+
-    theme(axis.title.x = element_text(size = 13))
+    theme(axis.text.x = element_text(size = 14)) + 
+    theme(axis.text.y = element_text(size = 14))
+  
   
   # crop to bbox if used:
   if (class(bbox) == "bbox") {
@@ -493,6 +637,8 @@ whale_ggplot <- function(whale_sf, bound, landLayer, studyArea, plotTitle, plotB
     ggtitle(plotTitle) 
   
   outPlot <- format_ggplot(rawPlot, plotBbox)
+  
+  outPlot <- less_x_ticks(outPlot, tickNum = 5)
   
   return(outPlot)
 }

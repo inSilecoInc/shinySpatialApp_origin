@@ -1,3 +1,15 @@
+source(here::here("app/R/dataFunctions.R"))
+
+test_render <- function(rmdPath){
+  testName <- paste("Test Render:", sub(here::here(), "", rmdPath))
+  test_that(testName, {
+    success <- render_check_delete(rmdPath)
+    expect_true(success)
+  })
+}
+
+
+
 # ----- RENDER CHECK DELETE -----
 # This function is used to ensure that an rmarkdown file can be run without error.
 # It will attempt to render the file, check if an output file was generated, 
@@ -46,8 +58,8 @@ render_check_delete <- function(sectionPath, deleteFile=TRUE) {
 load_test_data <- function() {
   catch_all_output({
     # check if globalenv data is loaded, if not load it:
-    if (!exists("bioregion_sf")) {
-      load(here::here("app/data/testData.RData"), envir = globalenv())
+    if (!exists("region_sf")) {
+      filesLoaded <- load_rdata(c("CommonData"), "MAR", env = globalenv())
     }
     if (!exists("add_buffer")) {
       lapply(list.files(here::here("app/R"), pattern = ".[Rr]$", 
@@ -60,16 +72,17 @@ load_test_data <- function() {
                                                   "geoms_slc_coastal_test.geojson"))
     
     studyArea <- st_read(sample(studyAreaOpts, 1))
-    site <- sf::st_centroid(studyArea)
-    region <- st_read(here::here("app/studyAreaTest/geoms_slc_MarBioRegion.geojson"))
-    
-    mapDataList <- maps_setup(studyArea, site, region, land50k_sf, land10m_sf, bounds_sf)
+
+    mapDataList <- maps_setup(studyArea, region_sf, land50k_sf, land10m_sf, bounds_sf)
     list2env(mapDataList, envir = environment())
   })
   
   outList <- list("minYear" = 2010,
                   "region" = region,
-                  "site" = site,
+                  "absentCode" = "A",
+                  "presentCode" = "P",
+                  "summarySarTable" = data.frame("Species" = listed_species$`Common Name`),
+                  "summaryHabTable" = data.frame("Species" = listed_species$`Common Name`, "Obs"=NA, "range" = NA, "SDM" = NA, "IH" = NA, "CH" = NA),
                   "studyBox_geom" = studyBox_geom, 
                   "areaMap" = areaMap, 
                   "bboxMap" = bboxMap,
