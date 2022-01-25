@@ -33,6 +33,9 @@ ui <- fluidPage(
           # input
           textInput("u_name", label = "Enter your name", value = "Lorem ipsum"),
           textInput("u_email", label = "Enter your email", value = "lipsum@dfo-mpo.gc.ca"),
+          # region for the report
+          selectInput("u_region", label = "Indicate for which Region you are genetring this report", 
+                      choices = c("Maritimes Region","Gulf Region")),
           textAreaInput("u_notes", label = "Provide the reason/rationale for generating the report", value = ""),
           # terms and conditions
           checkboxGroupInput("u_consent", label = "Terms and conditions",
