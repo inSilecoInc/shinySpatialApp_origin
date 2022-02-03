@@ -118,7 +118,7 @@ ui <- fluidPage(
               myhelptxt("Import your own file. The file will be read by
               <a href='https://www.rdocumentation.org/packages/sf/versions/0.2-2/topics/st_read' target='_blank'>
               <code>sf::st_read()</code></a>
-              which supports a vast variety of vector formats. Note that for ESRI Shapfiles, several files need to be uploaded, that is why the file selection below allow for multiple files to be uploaded at once."),
+              which supports a vast variety of vector formats. Note that for ESRI Shapefiles, several files need to be uploaded, that is why the file selection below allow for multiple files to be uploaded at once."),
               fileInput("import_shapefile", "Choose a file", multiple = TRUE),
               numericInput("import_buffer", label = "Optional buffer (m)", value = "0", min = 0),
               actionButton('save_import', 'Save', icon = icon("download"))
